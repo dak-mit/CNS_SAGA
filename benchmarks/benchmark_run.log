@@ -1,0 +1,77 @@
+/home/reward_hack/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+Benchmarking OTK generation (Fig 2) …
+  N=10 OTKs …
+    interval=5min  overhead=0.067s
+    interval=10min  overhead=0.032s
+    interval=15min  overhead=0.022s
+    interval=30min  overhead=0.011s
+    interval=60min  overhead=0.005s
+    interval=480min  overhead=0.001s
+  N=100 OTKs …
+    interval=5min  overhead=0.671s
+    interval=10min  overhead=0.308s
+    interval=15min  overhead=0.202s
+    interval=30min  overhead=0.103s
+    interval=60min  overhead=0.076s
+    interval=480min  overhead=0.009s
+  N=1000 OTKs …
+    interval=5min  overhead=6.157s
+    interval=10min  overhead=3.043s
+    interval=15min  overhead=2.013s
+    interval=30min  overhead=1.005s
+    interval=60min  overhead=0.506s
+    interval=480min  overhead=0.063s
+
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig2_otk_generation.pdf
+/home/reward_hack/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+Benchmarking per-token derivation …
+  Per-token time: 0.188 ms
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig3_token_derivation.pdf
+/home/reward_hack/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+Using paper's t_crypto = 7.0 ms  (--paper-tcrypto)
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig4_protocol_overhead_provider.pdf
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig5_protocol_overhead_agent.pdf
+/home/reward_hack/.local/lib/python3.10/site-packages/matplotlib/projections/__init__.py:63: UserWarning: Unable to import Axes3D. This may be due to multiple versions of Matplotlib being installed (e.g. as a system package and as a pip package). As a result, the 3D projection is not available.
+  warnings.warn("Unable to import Axes3D. This may be due to multiple versions of "
+Connecting to MongoDB at mongodb://localhost:27017/saga_bench …
+
+Benchmarking OTK request (Fig 6a) …
+  Single-node OTK request throughput: 208.7K req/min
+Benchmarking OTK refresh (Fig 6b) …
+  n_otks=10: 65.8K req/min
+  n_otks=100: 10.4K req/min
+  n_otks=1000: 1.4K req/min
+Benchmarking agent registration (Fig 7) …
+  n_otks=10: 67.2K req/min
+  n_otks=100: 10.9K req/min
+  n_otks=1000: 1.5K req/min
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig7_agent_reg_10otks.pdf
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig7_agent_reg_100otks.pdf
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig7_agent_reg_1000otks.pdf
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig8_otk_refresh_10otks.pdf
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig8_otk_refresh_100otks.pdf
+Saved → /home/reward_hack/Desktop/oldsaga/benchmarks/fig8_otk_refresh_1000otks.pdf
+
+All throughput figures saved.
+
+============================================================
+Running: fig2_otk_generation.py
+============================================================
+
+============================================================
+Running: fig3_token_derivation.py
+============================================================
+
+============================================================
+Running: fig4_fig5_protocol_overhead.py
+============================================================
+
+============================================================
+Running: fig6_7_8_throughput.py
+============================================================
+
+
+All benchmarks complete.  PDFs are in: /home/reward_hack/Desktop/oldsaga/benchmarks
