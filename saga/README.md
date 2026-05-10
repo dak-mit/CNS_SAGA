@@ -9,7 +9,7 @@
 
 Large Language Model (LLM)-based agents increasingly interact, collaborate, and delegate tasks to one another autonomously with minimal human interaction. Industry guidelines for agentic system governance emphasize the need for users to maintain comprehensive control over their agents, mitigating potential damage from malicious agents. Several proposed agentic system designs address agent identity, authorization, and delegation, but remain purely theoretical, without concrete implementation and evaluation. Most importantly, they do not provide user-controlled agent management.
 
-To address this gap, we propose SAGA, a scalable Security Architecture for Governing Agentic systems, that offers user oversight over their agents’ lifecycle. In our design, users register their agents with a central entity, the Provider, that maintains agents contact information, user-defined access control policies, and helps agents enforce these policies on inter-agent communication. We introduce a cryptographic mechanism for deriving access control tokens, that offers fine-grained control over an agent’s interaction with other agents, providing formal security guarantees. We evaluate SAGA on several agentic tasks, using agents in different geolocations, and multiple on-device and cloud LLMs, demonstrating minimal performance overhead with no impact on underlying task utility in a wide range of conditions. Our architecture enables secure and trustworthy deployment of autonomous agents, accelerating the responsible adoption of this technology in sensitive environments.
+To address this gap, we propose SAGA, a scalable Security Architecture for Governing Agentic systems, that offers user oversight over their agents' lifecycle. In our design, users register their agents with a central entity, the Provider, that maintains agents contact information, user-defined access control policies, and helps agents enforce these policies on inter-agent communication. We introduce a cryptographic mechanism for deriving access control tokens, that offers fine-grained control over an agent's interaction with other agents, providing formal security guarantees. We evaluate SAGA on several agentic tasks, using agents in different geolocations, and multiple on-device and cloud LLMs, demonstrating minimal performance overhead with no impact on underlying task utility in a wide range of conditions. Our architecture enables secure and trustworthy deployment of autonomous agents, accelerating the responsible adoption of this technology in sensitive environments.
 <hr>
 
 ## Requirements
@@ -55,9 +55,16 @@ cd saga/provider/ && python provider.py
 Take note of the `endpoint` and update `config.yaml` for the `provider`. If running locally, omit this step.
 
 ### Troubleshooting
-Certificates can sometimes be tricky. If you are getting SSL errors (e.g., `SSL: CERTIFICATE_VERIFY_FAILED`), it's most likely a `config.yaml` error. 
+Certificates can sometimes be tricky. If you are getting SSL errors (e.g., `SSL: CERTIFICATE_VERIFY_FAILED`), it's most likely a `config.yaml` error.
 
 Whenever you update the config file, it's **always good practice** to delete previously generated `.key`, `.pub` and `.crt` files. You can find such keys and certificates in `saga/ca` and `saga/provider`.
+
+```bash
+# If you see SSL: CERTIFICATE_VERIFY_FAILED, delete stale certs:
+rm -f saga/ca/*.key saga/ca/*.pub saga/ca/*.crt
+rm -f saga/provider/*.key saga/provider/*.pub saga/provider/*.crt
+# Then restart the CA and Provider
+```
 
 ## User Registration
 
@@ -126,7 +133,7 @@ Enter contact rulebook: [{"pattern":"*", "budget":10}]
 11:29:05 [PROVIDER] Agent customagent registered successfully with stamp DNRD50sR3PFHqXjiG7Xuyq2d5fzALKaKtY2MS/8PoE9S//+pcNpGlOeKXOB1tnI/YRs4IL0XI/HlKV243LmcAQ==.
 ```
 
-> __Note__: Once an agent has been successfully registered with the provider, a new subdirectory within the `user` directory, e.g. `user/<aid>` or in our case `user/bob@mail.com:customagent`. This is `customagent`'s woring directory. This directory contains the agent's manifest: `agent.json` listing the required metadata for the new agent to be able to operate within the SAGA network:
+> __Note__: Once an agent has been successfully registered with the provider, a new subdirectory within the `user` directory, e.g. `user/<aid>` or in our case `user/bob@mail.com:customagent`. This is `customagent`'s working directory. This directory contains the agent's manifest: `agent.json` listing the required metadata for the new agent to be able to operate within the SAGA network:
 
 ```json
 {
@@ -316,6 +323,181 @@ _, response = local_agent.run(
     agent_instance=code_agent_instance
 )
 ```
+
+---
+
+## Novel Contributions
+
+> Work by Kashvi Gupta (2023UCP1581) and Daksh Mittal (2023UCP1592) — Course Project, Computer Networks & Security.
+
+This section documents a security vulnerability discovered in the SAGA reference implementation and a novel mitigation developed as part of this project. All files are under `novel/`.
+
+### Vulnerability: OTK Pool Exhaustion (Denial of Service)
+
+#### Description
+
+The SAGA Provider's `/access` endpoint dispenses a receiving agent's One-Time Key (OTK) to an initiating agent. When called, the provider **atomically removes the OTK from the agent's MongoDB pool** and returns it to the caller — regardless of whether the initiating agent ever completes the Diffie-Hellman handshake.
+
+A legitimately registered adversary can therefore drain a victim's entire OTK pool by issuing repeated `/access` requests and discarding the returned OTKs without establishing any connection. Once the pool is empty, no further agent — including legitimate ones — can obtain an OTK for the victim, effectively rendering the victim **unreachable for all new connections**. The attack is silent: the victim agent receives no notification, and the Provider logs only normal `/access` calls.
+
+#### Threat Model
+
+- **Adversary capability**: a legitimately registered SAGA user with one registered agent. No special privileges required.
+- **Cost to adversary**: `N_OTK` contact-budget units, where `N_OTK` is the victim's pool size (typically 5–100). With a default budget of 100, the attack can be repeated 20 times against a 5-OTK pool before the adversary's own budget is exhausted.
+- **Impact**: complete DoS on the victim agent's ability to accept new connections. Existing sessions are unaffected.
+- **Persistence**: permanent until the victim manually re-registers to obtain fresh OTKs. The reference implementation has no automatic replenishment mechanism.
+
+#### Root Cause
+
+The vulnerability exists because of a mismatch between *when* an OTK is consumed and *when* its use is confirmed. The relevant logic in `provider.py` performs a single atomic `find_one_and_update` that simultaneously pops an OTK and decrements the contact budget, with no mechanism to return an OTK if the subsequent handshake is never completed.
+
+In the Signal Protocol (on which SAGA's OTK design is based), this is mitigated by issuing a "signed pre-key" rather than immediately deleting the OTK — a safeguard SAGA's provider does not implement.
+
+#### Running the Exploit (Proof of Concept)
+
+```bash
+cd /path/to/saga
+PYTHONPATH=/path/to/saga python novel/exploit_otk_exhaustion.py
+```
+
+The script logs in as Mallory's registered agent, queries Alice's OTK count from MongoDB, then calls `/access` in a loop until the pool is empty. Expected output:
+
+```
+OTK Pool Exhaustion Attack — PoC
+=================================================
+Adversary : mallory_adv@mail.com:meeting_agent
+Victim    : alice_final@mail.com:meeting_agent
+
+[*] Alice's OTK pool BEFORE attack: 5
+[*] Draining 5 OTKs (no handshake ever completed)...
+    Consumed OTK #1  — discarding, no connection made
+    Consumed OTK #2  — discarding, no connection made
+    Consumed OTK #3  — discarding, no connection made
+    Consumed OTK #4  — discarding, no connection made
+    Consumed OTK #5  — discarding, no connection made
+[*] Attack complete.
+    OTKs drained: 5
+    Alice's pool AFTER attack: 0
+[*] Mallory's contact budget spent: 5 / 100  (budget NOT exhausted)
+[!] Alice can no longer accept connections from ANY agent.
+```
+
+After the exploit, any legitimate connection attempt by Bob will be denied by the Provider with `[ACCESS] Access to alice_final@mail.com:meeting_agent denied`.
+
+---
+
+### Mitigation: Automatic OTK Refresh (`OTKRefreshAgent`)
+
+#### Motivation
+
+The SAGA paper (Section V-B) states that agents "can replenish their OTK pool by re-registering", but the reference implementation provides no mechanism to do this automatically. An agent whose pool is exhausted — whether by a DoS attack or heavy legitimate use — must be manually re-registered by its user, which is operationally impractical and creates an availability gap.
+
+#### Design
+
+Two new components are introduced in `novel/`, with **no changes to any existing file**:
+
+**`novel/provider_extension.py` — `ExtendedProvider`**
+
+A subclass of `Provider` that adds a single new endpoint `/replenish_otks`. When called, the endpoint:
+1. Authenticates the requesting user via JWT.
+2. Verifies ownership by checking the user ID prefix in the agent AID.
+3. Verifies each submitted OTK is signed by the user's Ed25519 key (same check as the original `/agent_register`).
+4. Atomically appends the verified OTKs to the agent's MongoDB pool using `$push`.
+
+**`novel/otk_refresh_agent.py` — `OTKRefreshAgent`**
+
+A subclass of `Agent` with one additional background thread that:
+1. Polls the agent's OTK count in MongoDB every `T_poll` seconds (default: 5 s).
+2. If the pool size falls to or below `refresh_threshold` (default: 2), generates `B` fresh X25519 key pairs (default: `B = 10`), signs each public key with the user's Ed25519 key, and calls `/replenish_otks`.
+3. Injects the new private keys directly into the agent's in-memory `otks` dict so they are immediately usable without a restart.
+
+#### Usage
+
+To use `OTKRefreshAgent` instead of the standard `Agent`, simply swap the class:
+
+```python
+from novel.otk_refresh_agent import OTKRefreshAgent
+
+alice_agent = OTKRefreshAgent(
+    workdir=alice_workdir,
+    material=get_agent_material(alice_workdir),
+    user_email="alice_final@mail.com",
+    user_jwt=alice_jwt,          # obtained via /login
+    user_sk=alice_sk,            # Ed25519 private key for OTK signing
+    refresh_threshold=2,         # replenish when <= 2 OTKs remain
+    refresh_batch=5,             # add 5 OTKs per replenishment cycle
+    poll_interval=3.0            # check every 3 seconds
+)
+alice_agent.listen()
+```
+
+The `ExtendedProvider` must be used in place of the standard `Provider` to enable the `/replenish_otks` endpoint:
+
+```python
+from novel.provider_extension import ExtendedProvider
+
+provider = ExtendedProvider(workdir="saga/provider/", name="provider")
+provider.run()
+```
+
+#### Running the End-to-End Demo
+
+The demo script starts Alice as an `OTKRefreshAgent`, simulates the OTK exhaustion attack, then shows the background thread automatically replenishing the pool:
+
+```bash
+PYTHONPATH=/path/to/saga python novel/demo_otk_refresh.py
+```
+
+Expected output:
+
+```
+[1] Logging in as Alice to get JWT...
+[2] Starting OTKRefreshAgent for Alice (threshold=2, batch=5)...
+    Initial pool size: 5
+
+[3] Simulating OTK exhaustion attack (Mallory drains pool)...
+    Drained OTK #1. Pool now: 4
+    Drained OTK #2. Pool now: 3
+    Drained OTK #3. Pool now: 2
+    Drained OTK #4. Pool now: 1
+    Drained OTK #5. Pool now: 0
+    Pool exhausted after 5 OTKs drained.
+
+[4] Watching OTKRefreshAgent auto-replenish (wait up to 15s)...
+    t+1s pool size = 0
+    t+2s pool size = 0
+[OTK-REFRESH] Pool low (0 OTKs). Replenishing...
+[OTK-REFRESH] Replenished 5 OTKs. New pool size: 5.
+    t+3s pool size = 5
+
+[+] SUCCESS: Pool refilled to 5 OTKs automatically!
+
+[5] Demo complete.
+```
+
+#### Security Properties
+
+The replenishment preserves the security guarantees of the original protocol:
+- Each new OTK is a fresh random X25519 key pair — no key reuse.
+- Each public OTK is signed by the user's long-term Ed25519 key, allowing the Provider to verify authenticity (same guarantee as original registration).
+- JWT authentication prevents unauthenticated replenishment requests.
+- Server-side AID parsing prevents one user from injecting OTKs into another user's agent.
+
+#### Limitations and Future Work
+
+This mitigation addresses availability but not the root-cause race condition. A complete fix would require **OTK claim tickets**: the provider issues a short-lived signed ticket instead of immediately consuming the OTK; the OTK is only permanently removed once the receiver confirms handshake completion. Abandoned tickets expire and the OTK is returned to the pool. This approach eliminates the exhaustion window entirely and makes periodic replenishment unnecessary for well-behaved networks.
+
+#### Files Added
+
+| File | Description | Lines |
+|---|---|---|
+| `novel/exploit_otk_exhaustion.py` | Proof-of-concept OTK exhaustion exploit | 135 |
+| `novel/provider_extension.py` | `ExtendedProvider` with `/replenish_otks` endpoint | 135 |
+| `novel/otk_refresh_agent.py` | `OTKRefreshAgent` with background refresh thread | 145 |
+| `novel/demo_otk_refresh.py` | End-to-end demonstration script | 120 |
+| `user_configs/mallory.yaml` | Adversary user config for exploit demo | 17 |
+
+---
 
 ## Citation
 
