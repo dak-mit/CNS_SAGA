@@ -1,0 +1,18 @@
+name: Alice Smith
+email: alice_final@mail.com
+passwd: "alice"
+agents:
+  - name: meeting_agent
+    description: "Meeting coordinator"
+    endpoint:
+      ip: 127.0.0.1
+      port: 9010
+      device_name: "lambda"
+    contact_rulebook:
+      - pattern: "*"
+        budget: 100
+    num_one_time_keys: 5
+    local_agent_config:
+      model_type: "huggingface"
+      model: "Qwen/Qwen2.5-Coder-32B-Instruct"
+      tools: [email, calendar]
